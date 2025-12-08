@@ -48,33 +48,71 @@ export default function LogDisplay({ logs }: LogDisplayProps) {
         const completedIds = new Set<string>();
         let lastVerification = null;
 
-        logs.forEach(log => {
-            if (log.type === 'progress' && log.status === 'complete' && log.step) {
-                completedIds.add(log.step);
+            const handleCompletion = (stepId: string, resultData?: any) => {
+                const index = findIndexById(stepId);
+                if (index !== -1 && newSteps[index].status !== 'complete') {
+                    newSteps[index] = { ...newSteps[index], status: 'complete', resultData: resultData };
+                    
+                    // Activate the next step (if it exists and is pending)
+                    const nextIndex = index + 1;
+                    if (nextIndex < newSteps.length && newSteps[nextIndex].status === 'pending') {
+                        newSteps[nextIndex] = { ...newSteps[nextIndex], status: 'active' };
+                    }
+                    changed = true;
+                }
+            };
+            
+            const activateStep = (stepId: string) => {
+                const index = findIndexById(stepId);
+                if (index !== -1 && newSteps[index].status === 'pending') {
+                    newSteps[index] = { ...newSteps[index], status: 'active' };
+                    changed = true;
+                }
+            };
+            
+            // --- A. Handle Log Messages (Activate steps based on message content) ---
+            if (lastLog.type === 'log') {
+                const message = lastLog.message.toLowerCase();
+                
+                if (message.includes('reading sequences')) {
+                    activateStep('read_sequences');
+                } else if (message.includes('found') && message.includes('sequences')) {
+                    handleCompletion('read_sequences');
+                } else if (message.includes('generating') && message.includes('embeddings')) {
+                    activateStep('generate_embeddings');
+                } else if (message.includes('running umap')) {
+                    handleCompletion('generate_embeddings');
+                    activateStep('umap_hdbscan');
+                } else if (message.includes('clustering complete')) {
+                    handleCompletion('umap_hdbscan');
+                } else if (message.includes('ncbi verification')) {
+                    activateStep('ncbi_verification');
+                }
             }
-            if (log.type === 'clustering_result') {
-                completedIds.add('clustering_result');
-                const step = steps.find(s => s.id === 'clustering_result');
-                if (step) step.resultData = log.data;
+            
+            // --- B. Handle Progress Messages ---
+            if (lastLog.type === 'progress' && lastLog.status === 'complete' && lastLog.step) {
+                handleCompletion(lastLog.step);
             }
-            if (log.type === 'verification_update') {
-                lastVerification = log.data;
-                if (log.data?.final_update) completedIds.add('ncbi_verification');
+            
+            // --- C. Handle Clustering Result ---
+            if (lastLog.type === 'clustering_result') {
+                handleCompletion('umap_hdbscan');
+                handleCompletion('clustering_result', lastLog.data);
+            }
+            
+            // --- D. Handle Final Completion ---
+            if (lastLog.type === 'complete') {
+                handleCompletion('ncbi_verification');
+                handleCompletion('analysis_complete');
             }
             if (log.type === 'complete') completedIds.add('analysis_complete');
         });
 
-        let foundActive = false;
-        steps.forEach((step) => {
-            if (completedIds.has(step.id)) {
-                step.status = 'complete';
-            } else {
-                if (!foundActive) {
-                    step.status = 'active';
-                    foundActive = true;
-                } else {
-                    step.status = 'pending';
-                }
+            // --- E. Handle Verification Updates (Logs WITHIN a step) ---
+            if (lastLog.type === 'verification_update') {
+                setLastVerificationUpdate(lastLog);
+                activateStep('ncbi_verification');
             }
         });
 

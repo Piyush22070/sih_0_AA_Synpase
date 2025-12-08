@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, JSX } from 'react';
 import { Upload, FileText, Type } from 'lucide-react';
 import LogDisplay from './LogDisplay'; 
 import type { AnalysisLog } from '../types'; 
+import { useAnalysis, type TaxaData } from '../context/AnalysisContext';
 
 // --- Constants ---
 const API_BASE_URL = 'http://localhost:8000'; 
@@ -28,6 +29,24 @@ export default function Analysis(): JSX.Element {
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  
+  // Get analysis context
+  const { updateAnalysisData, addTaxaData, addRecentAnalysis } = useAnalysis();
+  
+  // Store verification updates to process when complete
+  const verificationDataRef = useRef<Map<string, TaxaData>>(new Map());
+  
+  // Use refs for context functions to avoid re-renders
+  const updateAnalysisDataRef = useRef(updateAnalysisData);
+  const addTaxaDataRef = useRef(addTaxaData);
+  const addRecentAnalysisRef = useRef(addRecentAnalysis);
+  
+  // Update refs when functions change
+  useEffect(() => {
+    updateAnalysisDataRef.current = updateAnalysisData;
+    addTaxaDataRef.current = addTaxaData;
+    addRecentAnalysisRef.current = addRecentAnalysis;
+  }, [updateAnalysisData, addTaxaData, addRecentAnalysis]);
 
   const connectWebSocket = useCallback((fileId: string) => {
     if (wsRef.current) {
@@ -40,30 +59,119 @@ export default function Analysis(): JSX.Element {
     wsRef.current = ws;
 
     ws.onopen = () => {
-        setLogs(prev => [...prev, { type: 'log', message: 'Connected to server' }]);
+        setLogs(prev => [...prev, { type: 'log', message: `Connected to log stream for ID: ${fileId}` }]);
     };
 
     ws.onmessage = (event) => {
         try {
-            const message = JSON.parse(event.data);
-            setLogs(prev => [...prev, message]);
-            if (message.type === 'complete' || message.type === 'error') setIsAnalyzing(false);
+            const message = JSON.parse(line);
+            
+            // Convert server message format to client AnalysisLog format
+            if (message.type === 'log') {
+                setLogs(prev => [...prev, { type: 'log', message: message.message }]);
+            } else if (message.type === 'progress') {
+                setLogs(prev => [...prev, { 
+                    type: 'progress', 
+                    step: message.step, 
+                    status: message.status 
+                }]);
+            } else if (message.type === 'clustering_result') {
+                setLogs(prev => [...prev, { 
+                    type: 'clustering_result', 
+                    data: message.data 
+                }]);
+                
+                // Update dashboard with clustering results
+                updateAnalysisDataRef.current({
+                    totalReads: message.data.total_reads,
+                    totalClusters: message.data.total_clusters,
+                });
+                
+            } else if (message.type === 'verification_update') {
+                setLogs(prev => [...prev, { 
+                    type: 'verification_update', 
+                    data: message.data 
+                }]);
+                
+                // Extract taxa information from description
+                // Format: "Genus (Class: ClassName, X sequences, Y%)"
+                const description = message.data.description || '';
+                const genusMatch = description.match(/^([^(]+)/);
+                const classMatch = description.match(/Class:\s*([^,]+)/);
+                const countMatch = description.match(/(\d+)\s+sequences/);
+                const percentMatch = description.match(/([\d.]+)%\)/);
+                
+                if (genusMatch && classMatch) {
+                    const genus = genusMatch[1].trim();
+                    const taxaData: TaxaData = {
+                        name: genus,
+                        genus: genus,
+                        class: classMatch[1].trim(),
+                        count: countMatch ? parseInt(countMatch[1]) : 0,
+                        probability: message.data.match_percentage || 0,
+                        percentage: percentMatch ? parseFloat(percentMatch[1]) : 0,
+                    };
+                    
+                    // Store in ref to accumulate all taxa
+                    verificationDataRef.current.set(genus, taxaData);
+                }
+                
+            } else if (message.type === 'complete') {
+                setLogs(prev => [...prev, { type: 'complete', message: message.message }]);
+                
+                // Convert accumulated taxa data to array and update dashboard
+                const taxaArray = Array.from(verificationDataRef.current.values());
+                if (taxaArray.length > 0) {
+                    addTaxaDataRef.current(taxaArray);
+                    
+                    // Calculate novel taxa (those with low probability)
+                    const novelCount = taxaArray.filter(t => t.probability < 80).length;
+                    updateAnalysisDataRef.current({ novelTaxa: novelCount });
+                    
+                    // Add to recent analyses
+                    addRecentAnalysisRef.current({
+                        id: fileId.substring(0, 8),
+                        sample: `Sample-${fileId.substring(0, 8)}`,
+                        location: 'User Upload',
+                        status: 'Completed',
+                        date: new Date().toISOString().split('T')[0],
+                    });
+                }
+                
+                // Clear verification data for next analysis
+                verificationDataRef.current.clear();
+                
+            } else if (message.type === 'error') {
+                setLogs(prev => [...prev, { type: 'log', message: `ERROR: ${message.message}` }]);
+            } else {
+                // Fallback for any unhandled message types
+                setLogs(prev => [...prev, { type: 'log', message: JSON.stringify(message) }]);
+            }
         } catch (e) {
-            console.error('WS Error', e);
+            console.error('Failed to parse log from WS:', e, line);
+            setLogs(prev => [...prev, { type: 'log', message: `Failed to parse log: ${line}` }]);
         }
     };
 
-    ws.onerror = () => {
-        setLogs(prev => [...prev, { type: 'error', message: 'WebSocket connection failed.' }]);
-        setIsAnalyzing(false);
+    ws.onerror = (error) => {
+        console.error('WebSocket connection error event:', error);
+        setLogs(prev => [...prev, { type: 'log', message: 'WebSocket connection failed. Check browser console and server status.' }]);
     };
 
-    ws.onclose = () => { wsRef.current = null; };
+    ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason);
+        setLogs(prev => [...prev, { type: 'log', message: `Log stream closed (code: ${event.code}).` }]);
+        wsRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/health`).then(r => setBackendStatus(r.ok ? 'online' : 'offline')).catch(() => setBackendStatus('offline'));
-  }, []);
+    const storedFileId = localStorage.getItem(FILE_ID_KEY);
+    if (storedFileId) {
+        setCurrentFileId(storedFileId);
+        setLogs([{ type: 'log', message: `Found previous session ID: ${storedFileId}. Attempting to reconnect.` }]);
+        // To run live, remove comments from: connectWebSocket(storedFileId); 
+    }
 
   useEffect(() => {
     return () => { if (wsRef.current) wsRef.current.close(); };
@@ -84,44 +192,59 @@ export default function Analysis(): JSX.Element {
     }
 
     setIsAnalyzing(true);
-    setLogs([]);
-    setCurrentFileId(null);
+    setLogs([{ type: 'log', message: 'Starting upload and analysis...' }]);
+
+    // 1. Prepare the FormData payload
+    const formData = new FormData();
+    
+    if (uploadMode === 'file' && selectedFile) {
+        formData.append('file', selectedFile);
+        formData.append('type', fileType); 
+    } else if (uploadMode === 'text') {
+        const textBlob = new Blob([textInput], { type: 'text/plain' });
+        formData.append('file', textBlob, `input${fileType}`); 
+        formData.append('type', fileType);
+    }
+    
+    let newFileId: string | undefined;
 
     try {
-        if (uploadMode === 'text') {
-            const response = await fetch(TEXT_API_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sequence: textInput }), 
-            });
+        // --- STEP 1: BLOCKING HTTP UPLOAD (Real fetch) ---
+        setLogs(prev => [...prev, { type: 'log', message: 'Uploading file to server...' }]);
 
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`API Error: ${response.status} - ${errText}`);
-            }
-            
-            const result = await response.json();
-            setLogs([{ type: 'json_result', data: result } as any]);
-            setIsAnalyzing(false);
+        const response = await fetch(UPLOAD_ENDPOINT, {
+            method: 'POST',
+            body: formData, 
+        });
 
-        } else {
-            const formData = new FormData();
-            formData.append('file', selectedFile!);
+        if (!response.ok) {
+            throw new Error(`Upload failed with status: ${response.status} ${response.statusText}`);
+        }
+        
+        const result: UploadResponse = await response.json();
+        newFileId = result.file_id;
 
-            const response = await fetch(UPLOAD_ENDPOINT, { method: 'POST', body: formData });
-            if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
-            
-            const result: UploadResponse = await response.json();
-            if (!result.file_id) throw new Error('No file ID returned');
-
-            setCurrentFileId(result.file_id);
-            localStorage.setItem(FILE_ID_KEY, result.file_id);
-            connectWebSocket(result.file_id);
+        if (!newFileId) {
+            throw new Error('Upload response missing file_id.');
         }
 
+        // --- STEP 2: ESTABLISH WEBSOCKET CONNECTION ---
+        setLogs(prev => [...prev, { type: 'log', message: `Upload successful. ID: ${newFileId}. Opening log stream...` }]);
+
+        localStorage.setItem(FILE_ID_KEY, newFileId);
+        setCurrentFileId(newFileId);
+        
+        connectWebSocket(newFileId);
+        
+        setSelectedFile(null);
+        setTextInput('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
     } catch (error) {
-        setLogs(prev => [...prev, { type: 'error', message: `Error: ${error instanceof Error ? error.message : String(error)}` }]);
-        setIsAnalyzing(false);
+        console.error('Analysis failed:', error);
+        setLogs(prev => [...prev, { type: 'log', message: `Analysis failed: ${error instanceof Error ? error.message : String(error)}` }]);
+    } finally {
+        setIsAnalyzing(false); 
     }
   };
 
