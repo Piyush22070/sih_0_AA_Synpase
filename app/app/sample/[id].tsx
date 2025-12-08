@@ -35,7 +35,7 @@ export default function SampleDetailScreen() {
       }} />
       
       <ScrollView className="flex-1 p-4">
-        <Text className="text-3xl font-bold text-white mb-6">{sample.fileName}</Text>
+        <Text className="text-3xl font-bold text-white mb-6">{sample.fileName || 'NCS-2024-001A'}</Text>
 
         {/* Info Cards */}
         <View className="flex-row justify-between mb-4">

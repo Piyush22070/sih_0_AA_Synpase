@@ -1,18 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Slider from '@react-native-community/slider';
 
 const MOCK_LINEAGES = [
   { id: 'CL_2023_A4B8', date: '2023-10-26', score: 0.92, status: 'NOVEL', label: 'Extremely High' },
   { id: 'CL_2023_B2C1', date: '2023-09-15', score: 0.35, status: 'KNOWN', label: 'Low' },
   { id: 'CL_2022_D9E5', date: '2022-11-02', score: 0.82, status: 'NOVEL', label: 'High' },
+  { id: 'CL_2024_X1Y2', date: '2024-01-10', score: 0.65, status: 'NOVEL', label: 'Medium' },
+  { id: 'CL_2021_Z9W8', date: '2021-05-20', score: 0.15, status: 'KNOWN', label: 'Very Low' },
 ];
 
 export default function LineagesScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [scoreThreshold, setScoreThreshold] = useState(0);
+
+  const filteredLineages = useMemo(() => {
+    return MOCK_LINEAGES.filter(item => {
+      const matchesFilter = filter === 'All' || 
+                            (filter === 'Novel' && item.status === 'NOVEL') ||
+                            (filter === 'Known' && item.status === 'KNOWN');
+      const matchesSearch = item.id.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesScore = item.score >= scoreThreshold;
+      return matchesFilter && matchesSearch && matchesScore;
+    });
+  }, [filter, searchQuery, scoreThreshold]);
 
   const renderItem = ({ item }: { item: typeof MOCK_LINEAGES[0] }) => (
     <TouchableOpacity 
@@ -67,12 +83,14 @@ export default function LineagesScreen() {
           placeholder="Search by Cluster ID..." 
           placeholderTextColor="#64748B"
           className="flex-1 text-white"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
       </View>
 
       {/* Filters */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 max-h-10">
-        {['All', 'Novel', 'Known', 'Minted'].map((f, i) => (
+        {['All', 'Novel', 'Known'].map((f, i) => (
           <TouchableOpacity 
             key={i} 
             onPress={() => setFilter(f)}
@@ -85,22 +103,31 @@ export default function LineagesScreen() {
         ))}
       </ScrollView>
 
-      {/* Slider (Visual Only) */}
+      {/* Slider */}
       <View className="mb-6">
         <View className="flex-row justify-between mb-2">
-          <Text className="text-white font-medium">Novelty Score Threshold</Text>
-          <Text className="text-accent font-bold">0.75</Text>
+          <Text className="text-white font-medium">Min Novelty Score</Text>
+          <Text className="text-accent font-bold">{scoreThreshold.toFixed(2)}</Text>
         </View>
-        <View className="h-1 bg-gray-800 rounded-full relative">
-          <View className="absolute left-0 top-0 bottom-0 w-[75%] bg-accent rounded-full" />
-          <View className="absolute left-[75%] top-[-6] w-4 h-4 bg-accent rounded-full shadow-lg" />
-        </View>
+        <Slider
+          style={{width: '100%', height: 40}}
+          minimumValue={0}
+          maximumValue={1}
+          minimumTrackTintColor="#22D3EE"
+          maximumTrackTintColor="#1E293B"
+          thumbTintColor="#22D3EE"
+          value={scoreThreshold}
+          onValueChange={setScoreThreshold}
+        />
       </View>
 
       <FlatList
-        data={MOCK_LINEAGES}
+        data={filteredLineages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          <Text className="text-gray-500 text-center mt-10">No lineages found matching criteria.</Text>
+        }
       />
     </SafeAreaView>
   );
