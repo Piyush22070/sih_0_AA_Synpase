@@ -4,6 +4,10 @@ export interface Sample {
   status: 'uploading' | 'processing' | 'complete' | 'error';
   fileName?: string;
   uploadDate?: string;
+  collectionTime?: string;
+  depth?: number;
+  latitude?: number;
+  longitude?: number;
   latestAnalysis?: AnalysisResult;
   logs: string[];
   progress: ProgressStep[];

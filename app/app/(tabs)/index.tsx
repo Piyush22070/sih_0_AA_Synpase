@@ -72,13 +72,23 @@ export default function OverviewScreen() {
         </View>
       </View>
 
-      <TouchableOpacity 
-        className="bg-card border border-gray-700 p-4 rounded-xl flex-row justify-center items-center mb-4"
-        onPress={() => router.push('/(tabs)/samples')}
-      >
-        <Text className="text-white font-bold text-lg mr-2">Explore Data</Text>
-        <Ionicons name="arrow-forward" size={20} color="#fff" />
-      </TouchableOpacity>
+      <View className="flex-row justify-between mb-4">
+        <TouchableOpacity 
+          className="flex-1 bg-card border border-gray-700 p-4 rounded-xl flex-row justify-center items-center mr-2"
+          onPress={() => router.push('/(tabs)/samples')}
+        >
+          <Text className="text-white font-bold text-lg mr-2">Explore Data</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          className="flex-1 bg-accent p-4 rounded-xl flex-row justify-center items-center ml-2"
+          onPress={() => router.push('/modal')}
+        >
+          <MaterialCommunityIcons name="dna" size={20} color="#0B1121" style={{ marginRight: 8 }} />
+          <Text className="text-background font-bold text-lg">Quick Analyze</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text className="text-gray-500 text-center text-xs">Last updated: 2 mins ago</Text>
     </SafeAreaView>
