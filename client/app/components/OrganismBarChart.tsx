@@ -81,10 +81,10 @@ const OrganismBarChart = () => {
       <ResponsiveContainer width="100%" height={400}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 150, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis type="number" />
+          <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${v.toFixed(0)}%`} />
           <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 12 }} />
           <Tooltip 
-            formatter={(value: any) => `${value.toFixed(2)}%`}
+            formatter={(value: any, name: any, props: any) => [`${value.toFixed(2)}%`, props.payload?.name || 'Species']}
             contentStyle={{ backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '8px' }}
           />
           <Bar dataKey="percentage" radius={[0, 8, 8, 0]}>
@@ -94,7 +94,26 @@ const OrganismBarChart = () => {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+      
+      {/* Species List */}
+      <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">Detected Species</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+          {chartData.map((species: any, idx: number) => (
+            <div key={idx} className="flex items-center gap-2 text-xs">
+              <div 
+                className="w-3 h-3 rounded-sm shrink-0" 
+                style={{ backgroundColor: getBarColor(species.percentage) }}
+              />
+              <span className="text-gray-700 truncate" title={species.name}>
+                {species.name} ({species.percentage.toFixed(1)}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
         <p className="text-sm text-gray-700">
           <span className="font-semibold">Total organisms detected:</span> {chartData.length}
         </p>

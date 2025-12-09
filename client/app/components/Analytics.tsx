@@ -312,50 +312,78 @@ export default function Analysis(): JSX.Element {
     }
   };
 
-  const logHeaderMessage = logs.length > 0 && logs[0].type === 'log'
-    ? 'Analysis Logs'
-    : currentFileId ? `Analysis Logs (ID: ${currentFileId.substring(0, 8)}...)` : 'Analysis Logs';
+  const logHeaderMessage = currentFileId ? `Logs (${currentFileId.substring(0, 8)}...)` : 'Analysis Logs';
 
   return (
-    <div className="p-8 h-screen flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
-      <div className="mb-6">
-        <h2 className="text-4xl font-bold text-white">eDNA Analysis</h2>
-        <div className="mt-3 flex items-center gap-2">
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${backendStatus === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {backendStatus === 'online' ? '🟢 Backend Online' : '🔴 Backend Offline'}
+    <div className="p-6 h-screen flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
+      {/* Header */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-white">eDNA Analysis</h2>
+            <p className="text-xs text-gray-400">Upload sequences for taxonomic identification</p>
+          </div>
+          <div className={`px-2 py-1 rounded text-[10px] font-medium ${backendStatus === 'online' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
+            {backendStatus === 'online' ? '● Online' : '● Offline'}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-2 gap-6 min-h-0">
-        <div className="bg-white rounded-lg p-6 flex flex-col shadow-lg">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Input Data</h3>
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => { setUploadMode('file'); setSelectedFile(null); setLogs([]); }} disabled={isAnalyzing} className={`flex-1 py-3 px-4 rounded-lg font-medium text-base transition-colors ${uploadMode === 'file' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
-              <FileText className="w-4 h-4 inline mr-2" /> File Upload
+      <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
+        {/* Input Panel */}
+        <div className="bg-white rounded p-4 flex flex-col">
+          <p className="text-xs font-medium text-gray-700 mb-2">Input Data</p>
+          
+          <div className="flex gap-1.5 mb-3">
+            <button 
+              onClick={() => { setUploadMode('file'); setSelectedFile(null); setLogs([]); }} 
+              disabled={isAnalyzing} 
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${uploadMode === 'file' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              <FileText className="w-3 h-3 inline mr-1" /> File
             </button>
-            <button onClick={() => { setUploadMode('text'); setTextInput(''); setLogs([]); }} disabled={isAnalyzing} className={`flex-1 py-3 px-4 rounded-lg font-medium text-base transition-colors ${uploadMode === 'text' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
-              <Type className="w-4 h-4 inline mr-2" /> Text Input
+            <button 
+              onClick={() => { setUploadMode('text'); setTextInput(''); setLogs([]); }} 
+              disabled={isAnalyzing} 
+              className={`flex-1 py-1.5 px-3 rounded text-xs font-medium transition-colors ${uploadMode === 'text' ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              <Type className="w-3 h-3 inline mr-1" /> Text
             </button>
           </div>
 
           {uploadMode === 'file' ? (
-            <div onDrop={handleDrop} onDragOver={(e) => e.preventDefault()} onClick={() => !isAnalyzing && fileInputRef.current?.click()} className="flex-1 border-2 border-dashed border-gray-300 rounded-lg p-8 flex flex-col items-center justify-center cursor-pointer hover:border-teal-400 transition-colors">
+            <div 
+              onDrop={handleDrop} 
+              onDragOver={(e) => e.preventDefault()} 
+              onClick={() => !isAnalyzing && fileInputRef.current?.click()} 
+              className="flex-1 border border-dashed border-gray-300 rounded p-4 flex flex-col items-center justify-center cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 transition-colors"
+            >
               <input ref={fileInputRef} type="file" onChange={handleFileSelect} className="hidden" />
-              <Upload className="w-12 h-12 text-gray-400 mb-4" />
-              <p className="text-gray-700 font-medium mb-1 text-base">{selectedFile ? selectedFile.name : 'Click to browse'}</p>
+              <Upload className="w-6 h-6 text-gray-400 mb-2" />
+              <p className="text-xs text-gray-600">{selectedFile ? selectedFile.name : 'Drop file or click to browse'}</p>
             </div>
           ) : (
-            <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} disabled={isAnalyzing} placeholder="Paste sequence text here..." className="flex-1 border border-gray-300 rounded-lg p-4 font-mono text-base resize-none" />
+            <textarea 
+              value={textInput} 
+              onChange={(e) => setTextInput(e.target.value)} 
+              disabled={isAnalyzing} 
+              placeholder="Paste sequence here..." 
+              className="flex-1 border border-gray-200 rounded p-3 font-mono text-xs resize-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 outline-none" 
+            />
           )}
 
-          <button onClick={handleAnalyze} disabled={isAnalyzing || (uploadMode === 'file' && !selectedFile) || (uploadMode === 'text' && !textInput.trim())} className="mt-4 w-full bg-teal-600 text-white py-4 rounded-lg font-medium text-lg hover:bg-teal-700 disabled:opacity-50">
+          <button 
+            onClick={handleAnalyze} 
+            disabled={isAnalyzing || (uploadMode === 'file' && !selectedFile) || (uploadMode === 'text' && !textInput.trim())} 
+            className="mt-3 w-full bg-teal-600 text-white py-2 rounded text-xs font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
             {isAnalyzing ? 'Processing...' : 'Start Analysis'}
           </button>
         </div>
 
-        <div className="bg-white rounded-lg p-6 flex flex-col shadow-lg">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">{logHeaderMessage}</h3>
+        {/* Logs Panel */}
+        <div className="bg-white rounded p-4 flex flex-col">
+          <p className="text-xs font-medium text-gray-700 mb-2">{logHeaderMessage}</p>
           <div className="flex-1 overflow-y-auto">
             <LogDisplay logs={logs} />
           </div>

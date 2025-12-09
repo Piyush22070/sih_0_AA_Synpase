@@ -15,20 +15,18 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   ];
 
   return (
-    <div className="w-64 bg-gradient-to-b from-gray-800 to-gray-900 h-screen flex flex-col border-r border-gray-700">
-      <div className="p-6 border-b border-gray-700">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
-            <Waves className="w-6 h-6 text-white" />
+    <div className="w-52 bg-gradient-to-b from-gray-800 to-gray-900 h-screen flex flex-col border-r border-gray-700">
+      <div className="p-4 border-b border-gray-700">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
+            <Waves className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">SamudraSetu</h1>
-          </div>
+          <span className="text-sm font-semibold text-white">SamudraSetu</span>
         </div>
       </div>
 
-      <nav className="flex-1 p-4">
-        <div className="space-y-1">
+      <nav className="flex-1 p-3">
+        <div className="space-y-0.5">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
@@ -36,21 +34,19 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded text-xs transition-all ${
                   isActive
-                    ? 'bg-teal-600 text-white shadow-lg'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    ? 'bg-teal-600 text-white'
+                    : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
                 }`}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-3.5 h-3.5" />
                 <span className="font-medium">{item.label}</span>
               </button>
             );
           })}
         </div>
       </nav>
-
-      
     </div>
   );
 }

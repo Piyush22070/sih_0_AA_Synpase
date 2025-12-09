@@ -76,13 +76,16 @@ async def add_knowledge(
     file_path = os.path.join(UPLOAD_DIR, f"{file_id}.{file_extension}")
     
     start_time = time.time()
+    training_logs = []  # Collect logs for storage
     
     try:
         # 1. Save File
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        print(f"Training endpoint hit - File: {file.filename}, Metadata: depth={depth}, lat={latitude}, lon={longitude}, date={collectionDate}, voyage={voyage}")
+        log_msg = f"Training started - File: {file.filename}, Type: {file_extension}, Metadata: depth={depth}, lat={latitude}, lon={longitude}, date={collectionDate}, voyage={voyage}"
+        print(log_msg)
+        training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
 
         # 2. Read file based on type
         num_rows = 0
@@ -100,6 +103,10 @@ async def add_knowledge(
                 # Convert column names to lowercase for matching
                 df_lower_cols = {col.lower(): col for col in df.columns}
                 
+                log_msg = f"CSV file loaded: {num_rows} rows, columns: {list(df.columns)}"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
+                
                 if 'sequence' in df_lower_cols:
                     sequence_col = df_lower_cols['sequence']
                     sequences = df[sequence_col].astype(str).tolist()
@@ -114,15 +121,23 @@ async def add_knowledge(
                     else:
                         species_labels = [f"{voyage or file.filename}" for _ in range(len(sequences))]
                 
-                print(f"CSV file processed: {num_rows} rows, columns: {list(df.columns)}, sequences found: {len(sequences)}")
+                log_msg = f"Sequences extracted: {len(sequences)} sequences found"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
             except Exception as csv_err:
-                raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(csv_err)}")
+                error_msg = f"Invalid CSV format: {str(csv_err)}"
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
                 
         elif file_extension.lower() in ['fasta', 'fa', 'fastq', 'fq']:
             try:
                 # Determine format
                 seq_format = 'fasta' if file_extension.lower() in ['fasta', 'fa'] else 'fastq'
                 sequence_records = []
+                
+                log_msg = f"Parsing {seq_format.upper()} file..."
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
                 
                 for record in SeqIO.parse(file_path, seq_format):
                     sequence_records.append({
@@ -135,39 +150,70 @@ async def add_knowledge(
                 
                 num_rows = len(sequence_records)
                 top_rows = sequence_records[:10]
-                print(f"{seq_format.upper()} file processed: {num_rows} sequences")
+                
+                log_msg = f"{seq_format.upper()} file parsed: {num_rows} sequences extracted"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
             except Exception as seq_err:
-                raise HTTPException(status_code=400, detail=f"Invalid sequence file: {str(seq_err)}")
+                error_msg = f"Invalid sequence file: {str(seq_err)}"
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
         else:
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_extension}")
+            error_msg = f"Unsupported file type: {file_extension}"
+            training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # 3. Generate embeddings and store in Qdrant
         vectors_stored = False
         if sequences and dna_bert_engine and bio_memory:
             try:
-                print(f"Generating embeddings for {len(sequences)} sequences...")
+                log_msg = f"Generating embeddings for {len(sequences)} sequences using DNABERT..."
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
+                
                 embeddings = dna_bert_engine.process_sequences(sequences)
-                print(f"Generated embeddings shape: {embeddings.shape}")
+                
+                log_msg = f"Embeddings generated: shape {embeddings.shape}"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
                 
                 # Store in Qdrant
+                log_msg = "Storing vectors in Qdrant database..."
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
+                
                 vectors_stored = bio_memory.add_knowledge(sequences, embeddings, species_labels)
                 if vectors_stored:
-                    print(f"Successfully stored {len(sequences)} sequences in Qdrant")
+                    log_msg = f"Successfully stored {len(sequences)} sequences in Qdrant collection"
+                    print(log_msg)
+                    training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
                 else:
-                    print("Failed to store sequences in Qdrant")
+                    log_msg = "Failed to store sequences in Qdrant"
+                    print(log_msg)
+                    training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] WARNING: {log_msg}")
             except Exception as vec_err:
-                print(f"Error processing vectors: {vec_err}")
+                log_msg = f"Error processing vectors: {vec_err}"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: {log_msg}")
                 import traceback
                 traceback.print_exc()
         else:
             if not sequences:
-                print("No sequences found in file for vector storage")
+                log_msg = "No sequences found in file for vector storage"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] WARNING: {log_msg}")
             else:
-                print("AI components not available for vector processing")
+                log_msg = "AI components not available for vector processing"
+                print(log_msg)
+                training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] WARNING: {log_msg}")
         
         training_time = time.time() - start_time
         
-        # Save to database
+        log_msg = f"Training completed in {training_time:.2f} seconds"
+        print(log_msg)
+        training_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_msg}")
+        
+        # Save to database with logs
         add_training_record(
             file_id=file_id,
             filename=file.filename,
@@ -179,6 +225,7 @@ async def add_knowledge(
             longitude=longitude,
             collection_date=collectionDate,
             voyage=voyage,
+            training_logs="\n".join(training_logs),
             status="completed"
         )
         
@@ -191,6 +238,7 @@ async def add_knowledge(
             "num_rows": num_rows,
             "training_time": training_time,
             "top_rows": top_rows,
+            "training_logs": training_logs,
             "metadata": {
                 "depth": depth,
                 "latitude": latitude,
