@@ -29,6 +29,14 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 EXTERNAL_API_URL = "https://pug-c-776087882401.europe-west1.run.app"
 
 
+"""
+Health Check
+"""
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint to verify backend is running"""
+    return {"status": "ok", "message": "Backend is running"}
+
 
 """"
 Upload Files

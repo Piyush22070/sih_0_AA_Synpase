@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import Analysis from './components/Analytics';
 import Training from './components/Traning';
 import SmartContracts from './components/SmartContract';
+import HistoryAnalytics from './components/HistoryAnalytics';
 import { AnalysisProvider } from './context/AnalysisContext';
 import { Menu, X } from 'lucide-react';
 
@@ -18,6 +19,8 @@ function App() {
         return <Dashboard />;
       case 'analysis':
         return <Analysis />;
+      case 'history':
+        return <HistoryAnalytics />;
       case 'training':
         return <Training />;
       case 'contracts':

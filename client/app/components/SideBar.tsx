@@ -1,4 +1,4 @@
-import { BarChart3, FlaskConical, FileText, Waves, Brain } from 'lucide-react';
+import { BarChart3, FlaskConical, FileText, Waves, Brain, Clock } from 'lucide-react';
 
 interface SidebarProps {
   currentPage: string;
@@ -9,6 +9,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'analysis', label: 'Analysis', icon: FlaskConical },
+    { id: 'history', label: 'History', icon: Clock },
     { id: 'training', label: 'Training', icon: Brain },
     { id: 'contracts', label: 'Smart Contracts', icon: FileText },
   ];

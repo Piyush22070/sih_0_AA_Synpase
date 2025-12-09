@@ -4,6 +4,7 @@ import { Upload, FileText, Type } from 'lucide-react';
 import LogDisplay from './LogDisplay'; 
 import type { AnalysisLog } from '../types'; 
 import { useAnalysis, type TaxaData } from '../context/AnalysisContext';
+import { addToHistory, updateHistoryItem } from '../utils/uploadHistory';
 
 // --- Constants ---
 const API_BASE_URL = 'http://localhost:8000'; 
@@ -30,6 +31,15 @@ export default function Analysis(): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   
+  // Track analysis stats for history
+  const analysisStatsRef = useRef<{
+    totalReads?: number;
+    totalClusters?: number;
+    taxaCount?: number;
+    novelTaxaCount?: number;
+    fileName?: string;
+  }>({});
+  
   // Get analysis context
   const { updateAnalysisData, addTaxaData, addRecentAnalysis } = useAnalysis();
   
@@ -47,6 +57,36 @@ export default function Analysis(): JSX.Element {
     addTaxaDataRef.current = addTaxaData;
     addRecentAnalysisRef.current = addRecentAnalysis;
   }, [updateAnalysisData, addTaxaData, addRecentAnalysis]);
+
+  // Check backend status periodically
+  const checkBackendStatus = useCallback(async () => {
+    try {
+      setBackendStatus('checking');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        setBackendStatus('online');
+      } else {
+        setBackendStatus('offline');
+      }
+    } catch (error) {
+      setBackendStatus('offline');
+    }
+  }, []);
+
+  // Initial health check and periodic checks
+  useEffect(() => {
+    checkBackendStatus();
+    const interval = setInterval(checkBackendStatus, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, [checkBackendStatus]);
 
   const connectWebSocket = useCallback((fileId: string) => {
     if (wsRef.current) {
@@ -86,6 +126,10 @@ export default function Analysis(): JSX.Element {
                     totalReads: message.data.total_reads,
                     totalClusters: message.data.total_clusters,
                 });
+
+                // Save to ref for later history update
+                analysisStatsRef.current.totalReads = message.data.total_reads;
+                analysisStatsRef.current.totalClusters = message.data.total_clusters;
                 
             } else if (message.type === 'verification_update') {
                 setLogs(prev => [...prev, { 
@@ -138,6 +182,16 @@ export default function Analysis(): JSX.Element {
                         location: 'User Upload',
                         status: 'Completed',
                         date: new Date().toISOString().split('T')[0],
+                    });
+
+                    // Save to upload history
+                    analysisStatsRef.current.taxaCount = taxaArray.length;
+                    analysisStatsRef.current.novelTaxaCount = novelCount;
+                    
+                    updateHistoryItem(fileId, {
+                      status: 'completed',
+                      taxaCount: taxaArray.length,
+                      novelTaxaCount: novelCount,
                     });
                 }
                 
@@ -237,6 +291,22 @@ export default function Analysis(): JSX.Element {
 
         localStorage.setItem(FILE_ID_KEY, newFileId);
         setCurrentFileId(newFileId);
+
+        // Create upload history entry
+        const fileName = uploadMode === 'file' && selectedFile 
+          ? selectedFile.name 
+          : `text-input${fileType}`;
+        
+        analysisStatsRef.current.fileName = fileName;
+        
+        addToHistory({
+          id: newFileId,
+          fileName: fileName,
+          fileType: uploadMode === 'file' ? fileType : 'text',
+          uploadDate: new Date().toISOString(),
+          fileSize: uploadMode === 'file' ? selectedFile?.size : undefined,
+          status: 'in-progress',
+        });
         
         connectWebSocket(newFileId);
         
@@ -247,6 +317,11 @@ export default function Analysis(): JSX.Element {
     } catch (error) {
         console.error('Analysis failed:', error);
         setLogs(prev => [...prev, { type: 'log', message: `Analysis failed: ${error instanceof Error ? error.message : String(error)}` }]);
+        
+        // Mark history entry as failed if we have a file ID
+        if (newFileId) {
+          updateHistoryItem(newFileId, { status: 'failed' });
+        }
     } finally {
         setIsAnalyzing(false); 
     }
