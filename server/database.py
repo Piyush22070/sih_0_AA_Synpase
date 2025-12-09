@@ -25,6 +25,7 @@ def init_database():
             longitude TEXT,
             collection_date TEXT,
             voyage TEXT,
+            training_logs TEXT,
             status TEXT DEFAULT 'completed',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -60,6 +61,7 @@ def add_training_record(
     longitude: str = "",
     collection_date: str = "",
     voyage: str = "",
+    training_logs: str = "",
     status: str = "completed"
 ):
     """Add a new training record to the database"""
@@ -69,9 +71,9 @@ def add_training_record(
     try:
         cursor.execute('''
             INSERT INTO training_history 
-            (file_id, filename, file_type, num_rows, training_time, depth, latitude, longitude, collection_date, voyage, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (file_id, filename, file_type, num_rows, training_time, depth, latitude, longitude, collection_date, voyage, status))
+            (file_id, filename, file_type, num_rows, training_time, depth, latitude, longitude, collection_date, voyage, training_logs, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (file_id, filename, file_type, num_rows, training_time, depth, latitude, longitude, collection_date, voyage, training_logs, status))
         
         conn.commit()
         return True

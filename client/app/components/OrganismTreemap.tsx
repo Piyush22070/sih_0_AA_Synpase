@@ -162,17 +162,35 @@ const OrganismTreemap = () => {
                 borderRadius: '8px',
                 padding: '8px',
               }}
-              formatter={(value: any) => [
+              formatter={(value: any, name: any, props: any) => [
                 `${typeof value === 'number' ? value.toFixed(2) : '0.00'}%`,
-                'Abundance',
+                props.payload?.name || 'Species',
               ]}
             />
           </Treemap>
         </ResponsiveContainer>
       </div>
 
+      {/* Species Legend - Full Names List */}
+      <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">All Detected Species</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+          {chartData[0]?.children.map((species: any, idx: number) => (
+            <div key={idx} className="flex items-center gap-2 text-xs">
+              <div 
+                className="w-3 h-3 rounded-sm flex-shrink-0" 
+                style={{ backgroundColor: getColor(species.value) }}
+              />
+              <span className="text-gray-700 truncate" title={species.name}>
+                {species.name} ({species.value.toFixed(1)}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-3 gap-4">
         <div className="p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
           <p className="text-xs font-semibold text-gray-600 uppercase">Highest Abundance</p>
           <p className="text-2xl font-bold text-red-600 mt-1">
