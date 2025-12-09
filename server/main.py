@@ -23,9 +23,21 @@ from database import (
     clear_all_history
 )
 # NOTE: ClusterEngine import removed - using external API instead
+from module.model_handler import DNABertEngine
+from module.vector_memory import BioMemory
 
 set_global_seed(42)
 init_database()
+
+# Initialize AI Engine and Vector Memory
+try:
+    dna_bert_engine = DNABertEngine()
+    bio_memory = BioMemory()
+    print("AI Engine and Vector Memory initialized successfully")
+except Exception as e:
+    print(f"Warning: Could not initialize AI components: {e}")
+    dna_bert_engine = None
+    bio_memory = None
 
 app = FastAPI()
 
@@ -75,13 +87,25 @@ async def add_knowledge(
         # 2. Read file based on type
         num_rows = 0
         top_rows = []
+        sequences = []
+        species_labels = []
         
         if file_extension.lower() == 'csv':
             try:
                 df = pd.read_csv(file_path)
                 num_rows = len(df)
                 top_rows = df.head(10).to_dict('records')
-                print(f"CSV file processed: {num_rows} rows, columns: {list(df.columns)}")
+                
+                # Extract sequences and species for vector storage
+                if 'sequence' in df.columns:
+                    sequences = df['sequence'].astype(str).tolist()
+                    # Use species column if available, otherwise use filename
+                    if 'species' in df.columns:
+                        species_labels = df['species'].astype(str).tolist()
+                    else:
+                        species_labels = [f"{voyage or file.filename}" for _ in range(len(sequences))]
+                
+                print(f"CSV file processed: {num_rows} rows, columns: {list(df.columns)}, sequences found: {len(sequences)}")
             except Exception as csv_err:
                 raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(csv_err)}")
                 
@@ -89,22 +113,48 @@ async def add_knowledge(
             try:
                 # Determine format
                 seq_format = 'fasta' if file_extension.lower() in ['fasta', 'fa'] else 'fastq'
-                sequences = []
+                sequence_records = []
                 
                 for record in SeqIO.parse(file_path, seq_format):
-                    sequences.append({
+                    sequence_records.append({
                         'id': record.id,
                         'sequence': str(record.seq)[:50] + '...' if len(str(record.seq)) > 50 else str(record.seq),
                         'length': len(record.seq)
                     })
+                    sequences.append(str(record.seq))
+                    species_labels.append(record.id or f"{voyage or file.filename}")
                 
-                num_rows = len(sequences)
-                top_rows = sequences[:10]
+                num_rows = len(sequence_records)
+                top_rows = sequence_records[:10]
                 print(f"{seq_format.upper()} file processed: {num_rows} sequences")
             except Exception as seq_err:
                 raise HTTPException(status_code=400, detail=f"Invalid sequence file: {str(seq_err)}")
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_extension}")
+        
+        # 3. Generate embeddings and store in Qdrant
+        vectors_stored = False
+        if sequences and dna_bert_engine and bio_memory:
+            try:
+                print(f"Generating embeddings for {len(sequences)} sequences...")
+                embeddings = dna_bert_engine.process_sequences(sequences)
+                print(f"Generated embeddings shape: {embeddings.shape}")
+                
+                # Store in Qdrant
+                vectors_stored = bio_memory.add_knowledge(sequences, embeddings, species_labels)
+                if vectors_stored:
+                    print(f"Successfully stored {len(sequences)} sequences in Qdrant")
+                else:
+                    print("Failed to store sequences in Qdrant")
+            except Exception as vec_err:
+                print(f"Error processing vectors: {vec_err}")
+                import traceback
+                traceback.print_exc()
+        else:
+            if not sequences:
+                print("No sequences found in file for vector storage")
+            else:
+                print("AI components not available for vector processing")
         
         training_time = time.time() - start_time
         
@@ -127,6 +177,8 @@ async def add_knowledge(
         return {
             "message": f"Successfully processed {num_rows} records",
             "model_trained": True,
+            "vectors_stored": vectors_stored,
+            "num_sequences": len(sequences),
             "num_rows": num_rows,
             "training_time": training_time,
             "top_rows": top_rows,
@@ -423,6 +475,8 @@ async def websocket_endpoint(websocket: WebSocket, file_id: str):
                     percentage = (data["count"] / count * 100) if count > 0 else 0
                     top_groups.append({
                         "group_id": idx,
+                        "genus": genus,
+                        "class": data["class"],
                         "count": data["count"],
                         "percentage": round(percentage, 2)
                     })
